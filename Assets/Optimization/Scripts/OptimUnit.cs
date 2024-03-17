@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using Unity.Mathematics;
 using UnityEditor.ShaderGraph.Internal;
 using UnityEngine;
 using UnityEngine.Profiling;
@@ -26,26 +27,49 @@ public class OptimUnit : MonoBehaviour
         PickNewVelocityChangeTime();
         PickNewAngularVelocity();
         PickNewAngularVelocityChangeTime();
+
+        StartCoroutine(BoundaryCheck(1));
     }
 
     // Update is called once per frame
     void Update()
     {
+        Profiler.BeginSample("HandleTime");
         HandleTime();
+        Profiler.EndSample();
 
+        Profiler.BeginSample("Rotating");
         var t = transform;
 
-        if(transform.position.x <= 0)
-            transform.Rotate(currentAngularVelocity * Time.deltaTime, 0, 0);
-        else if(transform.position.x > 0)
-            transform.Rotate(-currentAngularVelocity * Time.deltaTime, 0 ,0);
-        
-        if(transform.position.z >= 0)
-            transform.Rotate(0,0, currentAngularVelocity * Time.deltaTime);
-        else if(transform.position.z < 0)
-            transform.Rotate(0,0, -currentAngularVelocity * Time.deltaTime);
-        
+
+        transform.Rotate(-currentAngularVelocity * (transform.position.x / math.abs(transform.position.x)) * Time.deltaTime, 0, 0);
+
+        transform.Rotate(0, 0, currentAngularVelocity * (transform.position.z / math.abs(transform.position.z)) * Time.deltaTime);
+
+        Profiler.EndSample();
+
+        Profiler.BeginSample("Moving");
         Move();
+        Profiler.EndSample();
+
+
+    }
+
+
+    private void PickNewVelocity()
+    {
+        currentVelocity = Random.insideUnitSphere;
+        currentVelocity.y = 0;
+        currentVelocity *= 10.0f;
+    }
+
+    private IEnumerator BoundaryCheck( float waitTime){
+
+        while(true){
+
+            yield return new WaitForSeconds(waitTime);
+            
+        Profiler.BeginSample("Boundary Check");
 
         //check if we are moving away from the zone and invert velocity if this is the case
         if (transform.position.x > areaSize.x && currentVelocity.x > 0)
@@ -58,7 +82,7 @@ public class OptimUnit : MonoBehaviour
             currentVelocity.x *= -1;
             PickNewVelocityChangeTime();
         }
-        
+
         if (transform.position.z > areaSize.z && currentVelocity.z > 0)
         {
             currentVelocity.z *= -1;
@@ -69,14 +93,9 @@ public class OptimUnit : MonoBehaviour
             currentVelocity.z *= -1;
             PickNewVelocityChangeTime();
         }
-    }
+        Profiler.EndSample();
+        }
 
-
-    private void PickNewVelocity()
-    {
-        currentVelocity = Random.insideUnitSphere;
-        currentVelocity.y = 0;
-        currentVelocity *= 10.0f;
     }
 
     private void PickNewAngularVelocity()
@@ -96,19 +115,7 @@ public class OptimUnit : MonoBehaviour
 
     void Move()
     {
-        Vector3 position = transform.position;
-        
-        float distanceToCenter = Vector3.Distance(Vector3.zero, position);
-        float speed = 0.5f + distanceToCenter / areaSize.magnitude;
-        
-        int steps = Random.Range(1000, 2000);
-        float increment = Time.deltaTime / steps;
-        for (int i = 0; i < steps; ++i)
-        {
-            position += currentVelocity * increment * speed;
-        }
-        
-        transform.position = position;
+        transform.position = transform.position + currentVelocity * Time.deltaTime;
     }
 
     private void HandleTime()
